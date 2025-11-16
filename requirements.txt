@@ -27,8 +27,8 @@ tensorflow>=2.13.0
 torch>=2.0.0
 
 # Technical Analysis
-ta-lib>=0.4.0
-pandas-ta>=0.3.14b
+# ta-lib>=0.4.0  # Requires C library, install separately if needed
+# pandas-ta>=0.3.14b  # Not available for Python 3.11
 
 # NLP
 transformers>=4.30.0
