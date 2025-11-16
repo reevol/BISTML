@@ -1,0 +1,54 @@
+# Production Environment Override Configuration
+# This file overrides settings in data_sources.yaml for production environment
+
+# Macroeconomic Data Sources - Production settings
+macro_data:
+  # Production rate limits (conservative to avoid API limits)
+  fred:
+    rate_limit: 100  # Conservative limit
+
+  evds:
+    rate_limit: 80  # Conservative limit
+
+  yahoo:
+    rate_limit: 1500  # Conservative limit
+
+# Data Collection Settings - Production
+collection:
+  # Full historical data
+  default_lookback_days: 730  # 2 years
+
+  # Production update frequencies (as per data_sources.yaml)
+  update_frequency:
+    turkish_cpi_ppi: 43200  # Monthly
+    interest_rates: 10080   # Weekly
+    market_indices: 60      # Hourly
+    forex: 30               # Every 30 minutes
+
+  # Conservative retry settings
+  retry:
+    max_attempts: 3
+    backoff_factor: 2
+
+  # Production cache settings
+  cache:
+    enabled: true
+    ttl: 3600  # 1 hour
+    backend: "redis"  # Use Redis for production
+    redis_url: "${REDIS_URL:redis://localhost:6379/0}"
+
+# Logging Configuration - Production
+logging:
+  level: "INFO"  # Less verbose for production
+  format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+  file: "logs/prod/macro_collector.log"
+  max_bytes: 10485760  # 10 MB
+  backup_count: 10
+
+# Production-specific features
+features:
+  # Additional monitoring in production
+  monitoring:
+    enabled: true
+    report_interval: 3600  # Report metrics every hour
+    alert_on_errors: true

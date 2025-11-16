@@ -1,0 +1,46 @@
+# Development Environment Override Configuration
+# This file overrides settings in data_sources.yaml for development environment
+
+# Macroeconomic Data Sources - Development settings
+macro_data:
+  # Lower rate limits for development
+  fred:
+    rate_limit: 50  # Reduced for dev
+
+  evds:
+    rate_limit: 30  # Reduced for dev
+
+  yahoo:
+    rate_limit: 100  # Reduced for dev
+
+# Data Collection Settings - Development
+collection:
+  # Shorter lookback for faster testing
+  default_lookback_days: 30
+
+  # More frequent updates for testing
+  update_frequency:
+    turkish_cpi_ppi: 1440  # Daily (for testing)
+    interest_rates: 1440   # Daily (for testing)
+    market_indices: 30     # Every 30 minutes
+    forex: 15              # Every 15 minutes
+
+  # More retries for flaky connections in dev
+  retry:
+    max_attempts: 5
+    backoff_factor: 1
+
+  # Cache settings for development
+  cache:
+    enabled: true
+    ttl: 300  # Shorter TTL (5 minutes) for testing
+    backend: "file"  # Use file cache instead of Redis for simplicity
+    redis_url: "redis://localhost:6379/1"  # Different DB for dev
+
+# Logging Configuration - Development
+logging:
+  level: "DEBUG"  # Verbose logging for development
+  format: "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+  file: "logs/dev/macro_collector.log"
+  max_bytes: 5242880  # 5 MB
+  backup_count: 3

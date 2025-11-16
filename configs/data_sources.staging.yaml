@@ -1,0 +1,55 @@
+# Staging Environment Override Configuration
+# This file overrides settings in data_sources.yaml for staging environment
+# Staging is similar to production but with some testing-friendly settings
+
+# Macroeconomic Data Sources - Staging settings
+macro_data:
+  # Moderate rate limits for staging
+  fred:
+    rate_limit: 80
+
+  evds:
+    rate_limit: 60
+
+  yahoo:
+    rate_limit: 1000
+
+# Data Collection Settings - Staging
+collection:
+  # Moderate historical data
+  default_lookback_days: 180  # 6 months
+
+  # Staging update frequencies (faster than prod for testing)
+  update_frequency:
+    turkish_cpi_ppi: 21600  # Half of monthly
+    interest_rates: 5040    # Half of weekly
+    market_indices: 30      # Every 30 minutes
+    forex: 15               # Every 15 minutes
+
+  # Moderate retry settings
+  retry:
+    max_attempts: 4
+    backoff_factor: 2
+
+  # Staging cache settings
+  cache:
+    enabled: true
+    ttl: 1800  # 30 minutes
+    backend: "redis"
+    redis_url: "redis://localhost:6379/2"  # Different DB for staging
+
+# Logging Configuration - Staging
+logging:
+  level: "DEBUG"  # Verbose logging for debugging in staging
+  format: "%(asctime)s - %(name)s - %(levelname)s - [%(filename)s:%(lineno)d] - %(message)s"
+  file: "logs/staging/macro_collector.log"
+  max_bytes: 10485760  # 10 MB
+  backup_count: 5
+
+# Staging-specific features
+features:
+  # Enable monitoring in staging
+  monitoring:
+    enabled: true
+    report_interval: 1800  # Report every 30 minutes
+    alert_on_errors: false  # Don't alert in staging
