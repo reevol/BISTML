@@ -1,0 +1,294 @@
+version: '3.8'
+
+services:
+  # =============================================================================
+  # Infrastructure Services
+  # =============================================================================
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: bistml-postgres
+    environment:
+      POSTGRES_DB: bistml
+      POSTGRES_USER: bistml_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bistml_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./microservices/database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bistml_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - bistml-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: bistml-redis
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    networks:
+      - bistml-network
+
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: bistml-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-bistml}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-bistml_password}
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"    # AMQP
+      - "15672:15672"  # Management UI
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    networks:
+      - bistml-network
+
+  # =============================================================================
+  # Data Collection Services
+  # =============================================================================
+
+  data-service:
+    build:
+      context: .
+      dockerfile: microservices/data-service/Dockerfile
+    container_name: bistml-data-service
+    environment:
+      - DATABASE_URL=postgresql://bistml_user:${DB_PASSWORD:-bistml_password}@postgres:5432/bistml
+      - REDIS_URL=redis://redis:6379/0
+      - FRED_API_KEY=${FRED_API_KEY}
+      - EVDS_API_KEY=${EVDS_API_KEY}
+    volumes:
+      - ./data:/app/data
+      - ./logs/data-service:/app/logs
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+  news-service:
+    build:
+      context: .
+      dockerfile: microservices/news-service/Dockerfile
+    container_name: bistml-news-service
+    environment:
+      - DATABASE_URL=postgresql://bistml_user:${DB_PASSWORD:-bistml_password}@postgres:5432/bistml
+      - REDIS_URL=redis://redis:6379/1
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-bistml}:${RABBITMQ_PASSWORD:-bistml_password}@rabbitmq:5672/
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+    volumes:
+      - ./data/news:/app/data
+      - ./logs/news-service:/app/logs
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+  # =============================================================================
+  # ML Model Services
+  # =============================================================================
+
+  ml-service:
+    build:
+      context: .
+      dockerfile: microservices/ml-service/Dockerfile
+    container_name: bistml-ml-service
+    environment:
+      - DATABASE_URL=postgresql://bistml_user:${DB_PASSWORD:-bistml_password}@postgres:5432/bistml
+      - REDIS_URL=redis://redis:6379/2
+      - MODEL_DIR=/app/models
+    volumes:
+      - ./models:/app/models
+      - ./data:/app/data
+      - ./logs/ml-service:/app/logs
+    ports:
+      - "8003:8000"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+  # =============================================================================
+  # Trading Services
+  # =============================================================================
+
+  signal-service:
+    build:
+      context: .
+      dockerfile: microservices/signal-service/Dockerfile
+    container_name: bistml-signal-service
+    environment:
+      - DATABASE_URL=postgresql://bistml_user:${DB_PASSWORD:-bistml_password}@postgres:5432/bistml
+      - REDIS_URL=redis://redis:6379/3
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-bistml}:${RABBITMQ_PASSWORD:-bistml_password}@rabbitmq:5672/
+      - ML_SERVICE_URL=http://ml-service:8000
+      - NEWS_SERVICE_URL=http://news-service:8000
+      - DATA_SERVICE_URL=http://data-service:8000
+    volumes:
+      - ./logs/signal-service:/app/logs
+    ports:
+      - "8004:8000"
+    depends_on:
+      - postgres
+      - redis
+      - rabbitmq
+      - ml-service
+      - news-service
+      - data-service
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+  portfolio-service:
+    build:
+      context: .
+      dockerfile: microservices/portfolio-service/Dockerfile
+    container_name: bistml-portfolio-service
+    environment:
+      - DATABASE_URL=postgresql://bistml_user:${DB_PASSWORD:-bistml_password}@postgres:5432/bistml
+      - REDIS_URL=redis://redis:6379/4
+      - SIGNAL_SERVICE_URL=http://signal-service:8000
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_CHAT_ID=${TELEGRAM_CHAT_ID}
+    volumes:
+      - ./logs/portfolio-service:/app/logs
+      - ./data/portfolios:/app/data
+    ports:
+      - "8005:8000"
+    depends_on:
+      - postgres
+      - redis
+      - signal-service
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+  # =============================================================================
+  # API Gateway
+  # =============================================================================
+
+  api-gateway:
+    build:
+      context: .
+      dockerfile: microservices/api-gateway/Dockerfile
+    container_name: bistml-api-gateway
+    environment:
+      - DATA_SERVICE_URL=http://data-service:8000
+      - NEWS_SERVICE_URL=http://news-service:8000
+      - ML_SERVICE_URL=http://ml-service:8000
+      - SIGNAL_SERVICE_URL=http://signal-service:8000
+      - PORTFOLIO_SERVICE_URL=http://portfolio-service:8000
+    ports:
+      - "8000:8000"
+    depends_on:
+      - data-service
+      - news-service
+      - ml-service
+      - signal-service
+      - portfolio-service
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+  # =============================================================================
+  # Frontend Services
+  # =============================================================================
+
+  gui-service:
+    build:
+      context: .
+      dockerfile: microservices/gui-service/Dockerfile
+    container_name: bistml-gui-service
+    environment:
+      - API_GATEWAY_URL=http://api-gateway:8000
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+    ports:
+      - "8501:8501"
+    depends_on:
+      - api-gateway
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+  # =============================================================================
+  # Monitoring & Management
+  # =============================================================================
+
+  scheduler:
+    build:
+      context: .
+      dockerfile: microservices/scheduler/Dockerfile
+    container_name: bistml-scheduler
+    environment:
+      - SIGNAL_SERVICE_URL=http://signal-service:8000
+      - DATA_SERVICE_URL=http://data-service:8000
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-bistml}:${RABBITMQ_PASSWORD:-bistml_password}@rabbitmq:5672/
+    volumes:
+      - ./logs/scheduler:/app/logs
+    depends_on:
+      - rabbitmq
+      - signal-service
+      - data-service
+    networks:
+      - bistml-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  rabbitmq_data:
+    driver: local
+
+networks:
+  bistml-network:
+    driver: bridge
