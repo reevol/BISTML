@@ -1,0 +1,194 @@
+# BIST Signal Scheduler Configuration
+
+# Scheduler Settings
+scheduler:
+  # Run signal generation immediately when scheduler starts (if market is open)
+  run_on_start: true
+
+  # Include pre-market and post-market hours (09:40-18:10)
+  # Set to false for regular hours only (10:00-18:00)
+  enable_extended_hours: false
+
+  # Maximum job history to maintain in memory
+  max_job_history: 1000
+
+  # Timezone (should always be Europe/Istanbul for BIST)
+  timezone: "Europe/Istanbul"
+
+# Signal Generation Intervals
+intervals:
+  # 30-minute signal generation
+  thirty_minute:
+    enabled: true
+    # Runs at :00 and :30 past each hour during market hours
+    schedule: "*/30 10-17 * * 1-5"  # cron format
+
+  # Hourly signal generation
+  hourly:
+    enabled: true
+    # Runs at :00 past each hour during market hours
+    schedule: "0 10-17 * * 1-5"  # cron format
+
+# Market Hours (Turkey Time - GMT+3)
+market_hours:
+  # Regular trading session
+  regular:
+    open: "10:00"
+    close: "18:00"
+
+  # Pre-market session (optional)
+  pre_market:
+    open: "09:40"
+    close: "10:00"
+
+  # Post-market session (optional)
+  post_market:
+    open: "18:00"
+    close: "18:10"
+
+# Holiday Handling
+holidays:
+  # Automatically skip these dates (will be updated annually)
+  # Note: Religious holiday dates are approximate and should be updated
+  auto_update: true
+
+  # Custom additional holidays (format: YYYY-MM-DD)
+  custom_dates:
+    - "2024-12-31"  # Example: Special market closure
+
+  # Retry failed jobs on next trading day
+  retry_on_next_trading_day: true
+
+# Job Execution Settings
+execution:
+  # Coalesce missed runs (combine if multiple were missed)
+  coalesce: true
+
+  # Maximum instances of same job running concurrently
+  max_instances: 1
+
+  # Grace period for misfired jobs (seconds)
+  misfire_grace_time: 300
+
+  # Maximum retries for failed jobs
+  max_retries: 3
+
+  # Retry delay (seconds)
+  retry_delay: 60
+
+# Logging Settings
+logging:
+  # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+
+  # Log file location
+  log_file: "${LOG_DIR}/scheduler.log"
+
+  # Log rotation
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+  # Log job execution details
+  log_job_execution: true
+
+  # Log market status checks
+  log_market_status: true
+
+# Notifications (optional)
+notifications:
+  # Enable email notifications
+  email:
+    enabled: false
+    smtp_host: "${SMTP_HOST}"
+    smtp_port: 587
+    from_address: "${SMTP_USER}"
+    to_addresses:
+      - "${NOTIFICATION_EMAIL}"
+    notify_on:
+      - job_failure
+      - market_open
+      - market_close
+
+  # Enable Telegram notifications
+  telegram:
+    enabled: false
+    bot_token: "${TELEGRAM_BOT_TOKEN}"
+    chat_id: "${TELEGRAM_CHAT_ID}"
+    notify_on:
+      - job_failure
+      - high_priority_signals
+
+# Signal Generation Settings
+signal_generation:
+  # Stocks to generate signals for
+  stock_universe:
+    # Use predefined indices
+    indices:
+      - "BIST30"
+      - "BIST50"
+      - "BIST100"
+
+    # Or specify individual stocks
+    custom_stocks: []
+
+  # Data lookback period for signal generation
+  lookback_periods:
+    technical: 30  # days
+    fundamental: 90  # days
+    news: 7  # days
+
+  # Minimum confidence threshold for signals
+  min_confidence: 0.6
+
+  # Enable specific signal types
+  signal_types:
+    technical: true
+    fundamental: true
+    whale_analysis: true
+    news_sentiment: true
+    combined: true
+
+# Database Settings
+database:
+  # Store signals in database
+  store_signals: true
+
+  # Store job execution history
+  store_job_history: true
+
+  # Signal retention period (days)
+  signal_retention: 365
+
+  # Job history retention (days)
+  job_history_retention: 90
+
+# Performance Settings
+performance:
+  # Use multiprocessing for signal generation
+  use_multiprocessing: true
+
+  # Number of worker processes (null = auto)
+  num_workers: null
+
+  # Enable caching
+  enable_cache: true
+
+  # Cache TTL (seconds)
+  cache_ttl: 1800  # 30 minutes
+
+# Monitoring and Health Checks
+monitoring:
+  # Enable health check endpoint
+  health_check_enabled: true
+
+  # Health check interval (seconds)
+  health_check_interval: 300
+
+  # Metrics collection
+  collect_metrics: true
+
+  # Metrics export format
+  metrics_format: "prometheus"  # or "json"
+
+  # Alert on consecutive failures
+  alert_on_consecutive_failures: 3
